@@ -1,0 +1,861 @@
+<!DOCTYPE html>
+<html lang="pt">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Análise Comparativa de Propostas - Lote 89, Melides</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+    <!-- Chosen Palette: Warm Neutrals -->
+    <!-- Application Structure Plan: A dashboard-style SPA was chosen to provide a high-level summary and deep-dive capabilities. The structure flows from general to specific: 1. Overall Summary. 2. Financial Timeline. 3. Detailed Category Analysis. 4. Company Profiles for qualitative assessment. 5. Exclusions & Notes for risk assessment. This user flow allows stakeholders to build a complete picture, combining quantitative and qualitative data. Added i18n for PT/EN, including item descriptions and new company profile section. -->
+    <!-- Visualization & Content Choices: 
+        - Report Info: Total proposal costs & deadlines. Goal: Compare totals. Viz: Large KPI Cards.
+        - Report Info: Costs per construction category. Goal: Compare major cost centers. Viz: Grouped Bar Chart (Chart.js/Canvas).
+        - Report Info: Line-by-line item pricing. Goal: Organize and compare specifics. Viz: Two dynamic HTML Tables per category (Top Cost, Top Difference).
+        - Report Info: Company background. Goal: Provide qualitative context. Viz: Side-by-side text cards. Justification: Adds a crucial layer of non-financial data for decision-making.
+        - Report Info: Items priced as 'included' or zero. Goal: Inform about risks. Viz: Simple HTML lists.
+        - Report Info: Cost distribution over time. Goal: Compare cash flow. Viz: Cumulative Line Chart (Chart.js/Canvas).
+    -->
+    <!-- CONFIRMATION: NO SVG graphics used. NO Mermaid JS used. -->
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #F8F7F4;
+            color: #333;
+        }
+        .chart-container {
+            position: relative;
+            width: 100%;
+            max-width: 1200px;
+            margin-left: auto;
+            margin-right: auto;
+            height: 400px;
+            max-height: 50vh;
+        }
+        .kpi-card {
+            background-color: #FFFFFF;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 1.5rem;
+            transition: all 0.3s ease;
+        }
+        .kpi-card:hover {
+            transform: translateY(-5px);
+            box-shadow: 0 10px 15px -3px rgb(0 0 0 / 0.1), 0 4px 6px -4px rgb(0 0 0 / 0.1);
+        }
+        .table-header-sticky {
+            position: sticky;
+            top: 0;
+            background-color: #F8F7F4;
+        }
+        .diff-pos { background-color: #fee2e2; }
+        .diff-neg { background-color: #dcfce7; }
+        .diff-zero { background-color: #f3f4f6; }
+        .note-item { background-color: #fffbeb; }
+        .lang-btn {
+            background-color: #e5e7eb;
+            color: #374151;
+            padding: 0.5rem 1rem;
+            border-radius: 0.5rem;
+            font-weight: 600;
+            transition: background-color 0.2s;
+        }
+        .lang-btn.active {
+            background-color: #3b82f6;
+            color: white;
+        }
+        .profile-card {
+            background-color: white;
+            border-radius: 0.75rem;
+            box-shadow: 0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1);
+            padding: 1.5rem;
+        }
+    </style>
+</head>
+<body class="antialiased">
+    <div class="container mx-auto p-4 md:p-8">
+
+        <header class="text-center mb-10 relative">
+            <div class="absolute top-0 right-0">
+                <div class="flex space-x-2">
+                    <button id="lang-pt" class="lang-btn active">PT</button>
+                    <button id="lang-en" class="lang-btn">EN</button>
+                </div>
+            </div>
+            <h1 data-lang-key="main_title" class="text-3xl md:text-4xl font-bold text-gray-800">Análise Comparativa de Propostas</h1>
+            <p data-lang-key="subtitle" class="text-lg text-gray-600 mt-2">Construção do Lote 89 em Melides</p>
+        </header>
+
+        <main>
+            <!-- Resumo Geral -->
+            <section id="summary" class="mb-12">
+                <h2 data-lang-key="summary_title" class="text-2xl font-semibold text-gray-700 mb-6 pb-2 border-b-2 border-gray-200">Resumo Geral</h2>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-6 text-center">
+                    <div class="kpi-card border-l-4 border-blue-500">
+                        <h3 data-lang-key="ktl_proposal_value" class="text-lg font-semibold text-gray-500">Valor Proposta KTL</h3>
+                        <p id="total-ktl" class="text-4xl font-bold text-blue-600 mt-2">€0.00</p>
+                    </div>
+                    <div class="kpi-card border-l-4 border-green-500">
+                        <h3 data-lang-key="map_proposal_value" class="text-lg font-semibold text-gray-500">Valor Proposta MAP (R02)</h3>
+                        <p id="total-map" class="text-4xl font-bold text-green-600 mt-2">€0.00</p>
+                    </div>
+                    <div class="kpi-card border-l-4 border-orange-500">
+                        <h3 data-lang-key="difference_label" class="text-lg font-semibold text-gray-500">Diferença (KTL vs MAP)</h3>
+                        <p id="total-diff" class="text-4xl font-bold text-orange-600 mt-2">€0.00</p>
+                        <p id="total-diff-percent" class="text-md text-gray-500 mt-1">0.00%</p>
+                    </div>
+                </div>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-6 text-center mt-6">
+                    <div class="kpi-card border-l-4 border-cyan-500">
+                        <h3 data-lang-key="ktl_deadline" class="text-lg font-semibold text-gray-500">Prazo de Execução KTL</h3>
+                        <p id="prazo-ktl" class="text-4xl font-bold text-cyan-600 mt-2">0 Meses</p>
+                    </div>
+                    <div class="kpi-card border-l-4 border-teal-500">
+                        <h3 data-lang-key="map_deadline" class="text-lg font-semibold text-gray-500">Prazo de Execução MAP</h3>
+                        <p id="prazo-map" class="text-4xl font-bold text-teal-600 mt-2">0 Meses</p>
+                    </div>
+                </div>
+
+                <div class="mt-10 bg-white p-6 rounded-xl shadow-md">
+                    <h3 data-lang-key="category_cost_comparison_title" class="text-xl font-semibold text-gray-700 mb-4">Comparativo de Custos por Categoria</h3>
+                     <p data-lang-key="category_cost_comparison_desc" class="text-sm text-gray-500 mb-4">Este gráfico compara os custos totais para cada categoria principal. Clique numa barra para filtrar a análise detalhada abaixo.</p>
+                    <div class="chart-container">
+                        <canvas id="summaryChart"></canvas>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Cronograma Financeiro -->
+            <section id="timeline" class="mb-12">
+                <h2 data-lang-key="financial_timeline_title" class="text-2xl font-semibold text-gray-700 mb-6 pb-2 border-b-2 border-gray-200">Cronograma Financeiro Acumulado</h2>
+                <div class="bg-white p-6 rounded-xl shadow-md">
+                    <p data-lang-key="financial_timeline_desc" class="text-sm text-gray-500 mb-4">O gráfico seguinte projeta a evolução do investimento acumulado ao longo do tempo de obra para cada proposta. A simulação reflete um fluxo de pagamentos típico, garantindo que o valor final corresponde ao total da proposta.</p>
+                    <div class="chart-container">
+                        <canvas id="financialTimelineChart"></canvas>
+                    </div>
+                </div>
+            </section>
+
+            <!-- Análise Detalhada -->
+            <section id="details" class="mb-12">
+                <div class="flex flex-wrap justify-between items-center mb-6 pb-2 border-b-2 border-gray-200">
+                     <h2 data-lang-key="detailed_analysis_title" class="text-2xl font-semibold text-gray-700">Análise Detalhada por Categoria</h2>
+                     <div class="w-full sm:w-auto mt-4 sm:mt-0">
+                         <select id="category-selector" class="block w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500">
+                            <option value="all" data-lang-key="all_categories_option">Todas as Categorias</option>
+                         </select>
+                     </div>
+                </div>
+
+                <div class="mt-8">
+                    <h3 data-lang-key="top_weight_title" class="text-xl font-semibold text-gray-700 mb-4">Artigos com Maior Peso Financeiro</h3>
+                    <p data-lang-key="top_weight_desc" class="text-sm text-gray-500 mb-4">Os 10 artigos mais dispendiosos na categoria selecionada, ordenados pelo seu custo médio.</p>
+                    <div class="bg-white p-2 sm:p-4 rounded-xl shadow-md overflow-x-auto" style="max-height: 60vh;">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="table-header-sticky">
+                                <tr>
+                                    <th data-lang-key="th_item" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artigo</th>
+                                    <th data-lang-key="th_description" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                                    <th data-lang-key="th_total_ktl" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total KTL (€)</th>
+                                    <th data-lang-key="th_total_map" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total MAP (€)</th>
+                                    <th data-lang-key="th_difference" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Diferença (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="details-table-body-weight" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+
+                <div class="mt-12">
+                    <h3 data-lang-key="top_diff_title" class="text-xl font-semibold text-gray-700 mb-4">Artigos com Maiores Diferenças de Custo</h3>
+                    <p data-lang-key="top_diff_desc" class="text-sm text-gray-500 mb-4">Os 10 artigos com a maior diferença de valor absoluto entre as duas propostas.</p>
+                    <div class="bg-white p-2 sm:p-4 rounded-xl shadow-md overflow-x-auto" style="max-height: 60vh;">
+                        <table class="min-w-full divide-y divide-gray-200">
+                            <thead class="table-header-sticky">
+                                <tr>
+                                     <th data-lang-key="th_item_2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Artigo</th>
+                                    <th data-lang-key="th_description_2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Descrição</th>
+                                    <th data-lang-key="th_total_ktl_2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total KTL (€)</th>
+                                    <th data-lang-key="th_total_map_2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Total MAP (€)</th>
+                                    <th data-lang-key="th_difference_2" class="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">Diferença (€)</th>
+                                </tr>
+                            </thead>
+                            <tbody id="details-table-body-diff" class="bg-white divide-y divide-gray-200"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </section>
+
+             <!-- Perfis das Empresas -->
+            <section id="company-profiles" class="mb-12">
+                <h2 data-lang-key="profiles_title" class="text-2xl font-semibold text-gray-700 mb-6 pb-2 border-b-2 border-gray-200">Perfil das Empresas</h2>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <!-- KTL Profile -->
+                    <div class="profile-card border-t-4 border-blue-500">
+                        <h3 class="text-2xl font-bold text-blue-600 mb-4">KTL - Sociedade de Construções, S.A.</h3>
+                        <div class="space-y-4 text-gray-600">
+                            <div>
+                                <h4 data-lang-key="profile_desc" class="font-semibold">Descrição</h4>
+                                <p data-lang-key="ktl_desc">Empresa de construção consolidada no mercado português, com foco em empreitadas de obras públicas e privadas. Oferece serviços "chave na mão", desde a conceção do projeto de arquitetura e engenharia até à construção e manutenção, com especialização nas áreas de retalho, escritórios e hotelaria.</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_founded" class="font-semibold">Ano de Constituição</h4>
+                                <p>1998</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_turnover" class="font-semibold">Volume de Negócios (estimado)</h4>
+                                <p>~ 25 - 40 Milhões € / ano</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_experience" class="font-semibold">Experiência Relevante</h4>
+                                <p data-lang-key="ktl_experience">Vasta experiência na construção de lojas para grandes marcas, escritórios, restaurantes e unidades hoteleiras. Portefólio sólido em reabilitação de edifícios e projetos de habitação, demonstrando capacidade técnica em diversas valências da construção civil.</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_org" class="font-semibold">Estrutura Organizacional</h4>
+                                <ul data-lang-key="ktl_org" class="list-disc list-inside text-sm">
+                                    <li>Departamento de Projeto (Arquitetura e Engenharia)</li>
+                                    <li>Departamento de Produção e Direção de Obra</li>
+                                    <li>Departamento de Instalações Especiais (AVAC e Elétrica)</li>
+                                    <li>Departamento Comercial e de Aprovisionamento</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_factors" class="font-semibold">Outros Fatores</h4>
+                                <p data-lang-key="ktl_factors">Empresa de média dimensão (50-100 colaboradores) com uma abordagem integrada que visa otimizar custos e prazos através da sinergia entre as equipas de projeto e obra. Foco na relação de confiança a longo prazo com os clientes.</p>
+                            </div>
+                        </div>
+                    </div>
+                    <!-- MAP Profile -->
+                    <div class="profile-card border-t-4 border-green-500">
+                        <h3 class="text-2xl font-bold text-green-600 mb-4">MAP Engenharia e Construção (MAP Group)</h3>
+                        <div class="space-y-4 text-gray-600">
+                            <div>
+                                <h4 data-lang-key="profile_desc_2" class="font-semibold">Descrição</h4>
+                                <p data-lang-key="map_desc">Parte de um grupo empresarial (MAP Group) que atua de forma integrada no mercado imobiliário, desde a construção à promoção e investimento. Posiciona-se como uma empresa inovadora, focada na qualidade, sustentabilidade e em soluções 360º para os seus clientes.</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_founded_2" class="font-semibold">Ano de Constituição</h4>
+                                <p>~ 2010 (mais de uma década de história)</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_turnover_2" class="font-semibold">Volume de Negócios (carteira de projetos)</h4>
+                                <p>> 150 Milhões € (carteira anunciada em 2024)</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_experience_2" class="font-semibold">Experiência Relevante</h4>
+                                <p data-lang-key="map_experience">Forte presença em múltiplos setores: residencial (incluindo condomínios de luxo), hotelaria (resorts), serviços (saúde, educação) e industrial/logística. Experiência comprovada em projetos de grande escala e tecnicamente exigentes.</p>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_org_2" class="font-semibold">Estrutura Organizacional</h4>
+                                <ul data-lang-key="map_org" class="list-disc list-inside text-sm">
+                                    <li>Unidades de Produção (Norte/Sul)</li>
+                                    <li>Direção de Instalações Especiais</li>
+                                    <li>Direção de Qualidade, Segurança e Ambiente</li>
+                                    <li>Direção Financeira e Contabilidade</li>
+                                    <li>Unidades de negócio para Promoção, Investimento e Serviços Imobiliários</li>
+                                </ul>
+                            </div>
+                            <div>
+                                <h4 data-lang-key="profile_factors_2" class="font-semibold">Outros Fatores</h4>
+                                <p data-lang-key="map_factors">Empresa reconhecida com certificações ISO 9001 (Qualidade), ISO 14001 (Ambiente) e ISO 45001 (Segurança). Distinguida como "Great Place to Work", indicando uma forte cultura empresarial e capacidade de retenção de talento. Forte aposta em inovação e sustentabilidade.</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+            
+            <!-- Exclusões e Notas -->
+            <section id="exclusions" class="mb-12">
+                <h2 data-lang-key="exclusions_title" class="text-2xl font-semibold text-gray-700 mb-6 pb-2 border-b-2 border-gray-200">Exclusões e Itens Não Quantificados</h2>
+                 <p data-lang-key="exclusions_desc" class="text-sm text-gray-500 mb-6">Esta secção lista itens com valor zero ou "incluído" numa proposta mas quantificados na outra. Estes pontos são cruciais para a análise de risco.</p>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                    <div>
+                        <h3 data-lang-key="ktl_unquantified" class="text-xl font-semibold text-blue-600 mb-4">KTL - Itens não quantificados</h3>
+                        <div id="ktl-exclusions" class="space-y-3">
+                           <p data-lang-key="no_items_found" class="text-gray-500">Nenhum item encontrado.</p>
+                        </div>
+                    </div>
+                    <div>
+                        <h3 data-lang-key="map_unquantified" class="text-xl font-semibold text-green-600 mb-4">MAP - Itens não quantificados</h3>
+                        <div id="map-exclusions" class="space-y-3">
+                            <p data-lang-key="no_items_found_2" class="text-gray-500">Nenhum item encontrado.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+             <!-- Análise e Conclusão -->
+            <section id="conclusion">
+                <h2 data-lang-key="conclusion_title" class="text-2xl font-semibold text-gray-700 mb-6 pb-2 border-b-2 border-gray-200">Análise e Conclusão</h2>
+                <div class="bg-white p-6 rounded-xl shadow-md space-y-4 text-gray-600">
+                    <p data-lang-key="conclusion_p1">A proposta da <strong>MAP</strong> mantém-se como a mais competitiva, com um custo total de <strong><span id='conclusion-map-total-val'></span></strong> e um prazo de <strong>20 meses</strong>. A proposta da <strong>KTL</strong> apresenta um valor de <strong><span id='conclusion-ktl-total-val'></span></strong> para um prazo de <strong>24 meses</strong>. A diferença final de <strong><span id='conclusion-diff-total-val'></span></strong> favorece a <strong id='conclusion-cheaper-proposer-val'>MAP</strong>.</p>
+                    <p data-lang-key="conclusion_p2">O <strong>cronograma financeiro</strong> reforça a vantagem da MAP. Apesar de um arranque ligeiramente mais rápido nos investimentos, o seu prazo mais curto implica que o capital total é empatado por menos tempo. A curva de investimento da KTL, embora mais suave inicialmente, estende-se por mais quatro meses, o que pode impactar o custo de oportunidade do capital.</p>
+                    <p data-lang-key="conclusion_p3">A análise das <strong>exclusões</strong> continua a ser um ponto de atenção crítico. A proposta da MAP apresenta vários itens técnicos importantes com valor zero ou "incluído", especialmente em <strong>Gás, Fotovoltaico e Piscinas</strong>. O valor destes itens na proposta da KTL ultrapassa os <strong>18.000 €</strong>. Esta prática representa um risco, pois o âmbito do que está "incluído" pode ser subjetivo.</p>
+                    <p><strong data-lang-key="recommendation_title">Recomendação:</strong> <span data-lang-key="recommendation_text">A proposta da MAP é superior nos três critérios principais: <strong>custo, prazo e fluxo de caixa</strong>. No entanto, é **imperativo** realizar uma reunião de clarificação técnica com a MAP para definir e documentar contratualmente o âmbito de todos os itens marcados como "incluídos". A decisão final deve ponderar a vantagem económica e temporal da MAP contra o risco associado a estas indefinições, garantindo que as especificações são cumpridas sem custos imprevistos.</span></p>
+                </div>
+            </section>
+        </main>
+
+        <footer class="text-center mt-12 pt-6 border-t border-gray-300">
+            <p class="text-sm text-gray-500"><span data-lang-key="report_generated">Relatório gerado em</span> <span id="report-date"></span>.</p>
+        </footer>
+
+    </div>
+
+    <script>
+    document.addEventListener('DOMContentLoaded', function () {
+        const translations = {
+            pt: {
+                main_title: "Análise Comparativa de Propostas",
+                subtitle: "Construção do Lote 89 em Melides",
+                summary_title: "Resumo Geral",
+                ktl_proposal_value: "Valor Proposta KTL",
+                map_proposal_value: "Valor Proposta MAP (R02)",
+                difference_label: "Diferença (KTL vs MAP)",
+                ktl_deadline: "Prazo de Execução KTL",
+                map_deadline: "Prazo de Execução MAP",
+                months_suffix: "Meses",
+                category_cost_comparison_title: "Comparativo de Custos por Categoria",
+                category_cost_comparison_desc: "Este gráfico compara os custos totais para cada categoria principal. Clique numa barra para filtrar a análise detalhada abaixo.",
+                financial_timeline_title: "Cronograma Financeiro Acumulado",
+                financial_timeline_desc: "O gráfico seguinte projeta a evolução do investimento acumulado ao longo do tempo de obra para cada proposta. A simulação reflete um fluxo de pagamentos típico, garantindo que o valor final corresponde ao total da proposta.",
+                detailed_analysis_title: "Análise Detalhada por Categoria",
+                all_categories_option: "Todas as Categorias",
+                top_weight_title: "Artigos com Maior Peso Financeiro",
+                top_weight_desc: "Os 10 artigos mais dispendiosos na categoria selecionada, ordenados pelo seu custo médio.",
+                top_diff_title: "Artigos com Maiores Diferenças de Custo",
+                top_diff_desc: "Os 10 artigos com a maior diferença de valor absoluto entre as duas propostas.",
+                th_item: "Artigo", th_description: "Descrição", th_total_ktl: "Total KTL (€)", th_total_map: "Total MAP (€)", th_difference: "Diferença (€)",
+                th_item_2: "Artigo", th_description_2: "Descrição", th_total_ktl_2: "Total KTL (€)", th_total_map_2: "Total MAP (€)", th_difference_2: "Diferença (€)",
+                profiles_title: "Perfil das Empresas",
+                profile_desc: "Descrição",
+                ktl_desc: "Empresa de construção consolidada no mercado português, com foco em empreitadas de obras públicas e privadas. Oferece serviços \"chave na mão\", desde a conceção do projeto de arquitetura e engenharia até à construção e manutenção, com especialização nas áreas de retalho, escritórios e hotelaria.",
+                profile_founded: "Ano de Constituição",
+                profile_turnover: "Volume de Negócios (estimado)",
+                profile_experience: "Experiência Relevante",
+                ktl_experience: "Vasta experiência na construção de lojas para grandes marcas, escritórios, restaurantes e unidades hoteleiras. Portefólio sólido em reabilitação de edifícios e projetos de habitação, demonstrando capacidade técnica em diversas valências da construção civil.",
+                profile_org: "Estrutura Organizacional",
+                ktl_org: "<ul class='list-disc list-inside text-sm'><li>Departamento de Projeto (Arquitetura e Engenharia)</li><li>Departamento de Produção e Direção de Obra</li><li>Departamento de Instalações Especiais (AVAC e Elétrica)</li><li>Departamento Comercial e de Aprovisionamento</li></ul>",
+                profile_factors: "Outros Fatores",
+                ktl_factors: "Empresa de média dimensão (50-100 colaboradores) com uma abordagem integrada que visa otimizar custos e prazos através da sinergia entre as equipas de projeto e obra. Foco na relação de confiança a longo prazo com os clientes.",
+                profile_desc_2: "Descrição",
+                map_desc: "Parte de um grupo empresarial (MAP Group) que atua de forma integrada no mercado imobiliário, desde a construção à promoção e investimento. Posiciona-se como uma empresa inovadora, focada na qualidade, sustentabilidade e em soluções 360º para os seus clientes.",
+                profile_founded_2: "Ano de Constituição",
+                profile_turnover_2: "Volume de Negócios (carteira de projetos)",
+                profile_experience_2: "Experiência Relevante",
+                map_experience: "Forte presença em múltiplos setores: residencial (incluindo condomínios de luxo), hotelaria (resorts), serviços (saúde, educação) e industrial/logística. Experiência comprovada em projetos de grande escala e tecnicamente exigentes.",
+                profile_org_2: "Estrutura Organizacional",
+                map_org: "<ul class='list-disc list-inside text-sm'><li>Unidades de Produção (Norte/Sul)</li><li>Direção de Instalações Especiais</li><li>Direção de Qualidade, Segurança e Ambiente</li><li>Direção Financeira e Contabilidade</li><li>Unidades de negócio para Promoção, Investimento e Serviços Imobiliários</li></ul>",
+                profile_factors_2: "Outros Fatores",
+                map_factors: "Empresa reconhecida com certificações ISO 9001 (Qualidade), ISO 14001 (Ambiente) e ISO 45001 (Segurança). Distinguida como \"Great Place to Work\", indicando uma forte cultura empresarial e capacidade de retenção de talento. Forte aposta em inovação e sustentabilidade.",
+                exclusions_title: "Exclusões e Itens Não Quantificados",
+                exclusions_desc: "Esta secção lista itens com valor zero ou \"incluído\" numa proposta mas quantificados na outra. Estes pontos são cruciais para a análise de risco.",
+                ktl_unquantified: "KTL - Itens não quantificados",
+                map_unquantified: "MAP - Itens não quantificados",
+                no_items_found: "Nenhum item encontrado.",
+                no_items_found_2: "Nenhum item encontrado.",
+                conclusion_title: "Análise e Conclusão",
+                conclusion_p1: "A proposta da <strong>MAP</strong> mantém-se como a mais competitiva, com um custo total de <strong><span id='conclusion-map-total-val'></span></strong> e um prazo de <strong>20 meses</strong>. A proposta da <strong>KTL</strong> apresenta um valor de <strong><span id='conclusion-ktl-total-val'></span></strong> para um prazo de <strong>24 meses</strong>. A diferença final de <strong><span id='conclusion-diff-total-val'></span></strong> favorece a <strong id='conclusion-cheaper-proposer-val'>MAP</strong>.",
+                conclusion_p2: "O <strong>cronograma financeiro</strong> reforça a vantagem da MAP. Apesar de um arranque ligeiramente mais rápido nos investimentos, o seu prazo mais curto implica que o capital total é empatado por menos tempo. A curva de investimento da KTL, embora mais suave inicialmente, estende-se por mais quatro meses, o que pode impactar o custo de oportunidade do capital.",
+                conclusion_p3: "A análise das <strong>exclusões</strong> continua a ser um ponto de atenção crítico. A proposta da MAP apresenta vários itens técnicos importantes com valor zero ou \"incluído\", especialmente em <strong>Gás, Fotovoltaico e Piscinas</strong>. O valor destes itens na proposta da KTL ultrapassa os <strong>18.000 €</strong>. Esta prática representa um risco, pois o âmbito do que está \"incluído\" pode ser subjetivo.",
+                recommendation_title: "Recomendação:",
+                recommendation_text: "A proposta da MAP é superior nos três critérios principais: <strong>custo, prazo e fluxo de caixa</strong>. No entanto, é **imperativo** realizar uma reunião de clarificação técnica com a MAP para definir e documentar contratualmente o âmbito de todos os itens marcados como \"incluídos\". A decisão final deve ponderar a vantagem económica e temporal da MAP contra o risco associado a estas indefinições, garantindo que as especificações são cumpridas sem custos imprevistos.",
+                report_generated: "Relatório gerado em",
+                categories: ["Encargos Gerais", "Arquitectura", "Estruturas", "AVAC", "Inst. Elétricas", "Paisagismo", "Telecomunicações", "Inst. Eletromecânicas", "Gás", "Abast. Água", "Drenagem", "Fotovoltaico", "Piscinas"],
+                ktl_cumulative: "KTL Acumulado",
+                map_cumulative: "MAP Acumulado",
+                month: "Mês"
+            },
+            en: {
+                main_title: "Comparative Proposal Analysis",
+                subtitle: "Construction of Lot 89 in Melides",
+                summary_title: "General Summary",
+                ktl_proposal_value: "KTL Proposal Value",
+                map_proposal_value: "MAP Proposal Value (R02)",
+                difference_label: "Difference (KTL vs MAP)",
+                ktl_deadline: "KTL Execution Period",
+                map_deadline: "MAP Execution Period",
+                months_suffix: "Months",
+                category_cost_comparison_title: "Category Cost Comparison",
+                category_cost_comparison_desc: "This chart compares the total costs for each main category. Click on a bar to filter the detailed analysis below.",
+                financial_timeline_title: "Cumulative Financial Timeline",
+                financial_timeline_desc: "The following chart projects the evolution of the cumulative investment over the construction period for each proposal. The simulation reflects a typical payment flow, ensuring the final value matches the proposal total.",
+                detailed_analysis_title: "Detailed Category Analysis",
+                all_categories_option: "All Categories",
+                top_weight_title: "Items with Highest Financial Weight",
+                top_weight_desc: "The 10 most expensive items in the selected category, sorted by their average cost.",
+                top_diff_title: "Items with Largest Cost Differences",
+                top_diff_desc: "The 10 items with the largest absolute value difference between the two proposals.",
+                th_item: "Item", th_description: "Description", th_total_ktl: "Total KTL (€)", th_total_map: "Total MAP (€)", th_difference: "Difference (€)",
+                th_item_2: "Item", th_description_2: "Description", th_total_ktl_2: "Total KTL (€)", th_total_map_2: "Total MAP (€)", th_difference_2: "Difference (€)",
+                profiles_title: "Company Profiles",
+                profile_desc: "Description",
+                ktl_desc: "An established construction company in the Portuguese market, focused on public and private contracts. It offers turnkey services, from architectural and engineering project design to construction and maintenance, specializing in retail, offices, and hospitality.",
+                profile_founded: "Year of Incorporation",
+                profile_turnover: "Turnover (estimated)",
+                profile_experience: "Relevant Experience",
+                ktl_experience: "Extensive experience in constructing stores for major brands, offices, restaurants, and hotel units. A solid portfolio in building rehabilitation and housing projects, demonstrating technical capacity in various civil construction fields.",
+                profile_org: "Organizational Structure",
+                ktl_org: "<ul class='list-disc list-inside text-sm'><li>Project Department (Architecture and Engineering)</li><li>Production and Site Management Department</li><li>Specialized Installations Department (HVAC and Electrical)</li><li>Commercial and Procurement Department</li></ul>",
+                profile_factors: "Other Factors",
+                ktl_factors: "A medium-sized company (50-100 employees) with an integrated approach aimed at optimizing costs and deadlines through synergy between project and construction teams. Focus on long-term trust-based relationships with clients.",
+                profile_desc_2: "Description",
+                map_desc: "Part of a business group (MAP Group) that operates in an integrated manner in the real estate market, from construction to development and investment. It positions itself as an innovative company focused on quality, sustainability, and 360º solutions for its clients.",
+                profile_founded_2: "Year of Incorporation",
+                profile_turnover_2: "Turnover (project portfolio)",
+                profile_experience_2: "Relevant Experience",
+                map_experience: "Strong presence in multiple sectors: residential (including luxury condominiums), hospitality (resorts), services (health, education), and industrial/logistics. Proven experience in large-scale and technically demanding projects.",
+                profile_org_2: "Organizational Structure",
+                map_org: "<ul class='list-disc list-inside text-sm'><li>Production Units (North/South)</li><li>Specialized Installations Directorate</li><li>Quality, Safety, and Environment Directorate</li><li>Finance and Accounting Directorate</li><li>Business units for Development, Investment, and Real Estate Services</li></ul>",
+                profile_factors_2: "Other Factors",
+                map_factors: "A company recognized with ISO 9001 (Quality), ISO 14001 (Environment), and ISO 45001 (Safety) certifications. Distinguished as a 'Great Place to Work', indicating a strong corporate culture and talent retention capacity. Strong commitment to innovation and sustainability.",
+                exclusions_title: "Exclusions & Unquantified Items",
+                exclusions_desc: "This section lists items with a zero value or marked as 'included' in one proposal but quantified in the other. These points are crucial for risk analysis.",
+                ktl_unquantified: "KTL - Unquantified Items",
+                map_unquantified: "MAP - Unquantified Items",
+                no_items_found: "No items found.",
+                no_items_found_2: "No items found.",
+                conclusion_title: "Analysis and Conclusion",
+                conclusion_p1: "The <strong>MAP</strong> proposal remains the most competitive, with a total cost of <strong><span id='conclusion-map-total-val'></span></strong> and a deadline of <strong>20 months</strong>. The <strong>KTL</strong> proposal has a value of <strong><span id='conclusion-ktl-total-val'></span></strong> for a <strong>24-month</strong> period. The final difference of <strong><span id='conclusion-diff-total-val'></span></strong> favors <strong id='conclusion-cheaper-proposer-val'>MAP</strong>.",
+                conclusion_p2: "The <strong>financial timeline</strong> reinforces MAP's advantage. Despite a slightly faster start in investments, its shorter term means the total capital is tied up for less time. KTL's investment curve, although smoother initially, extends for another four months, which can impact the opportunity cost of capital.",
+                conclusion_p3: "The analysis of <strong>exclusions</strong> remains a critical point of concern. The MAP proposal lists several important technical items with zero value or as 'included', especially in <strong>Gas, Photovoltaics, and Pools</strong>. The value of these items in the KTL proposal exceeds <strong>€18,000</strong>. This practice represents a risk, as the exact scope of what is 'included' can be subjective.",
+                recommendation_title: "Recommendation:",
+                recommendation_text: "MAP's proposal is superior in the three main criteria: <strong>cost, deadline, and cash flow</strong>. However, it is **imperative** to hold a technical clarification meeting with MAP to contractually define and document the scope of all items marked as 'included'. The final decision should weigh MAP's economic and time advantages against the risk associated with these undefined items, ensuring that all project specifications are met without unforeseen costs.",
+                report_generated: "Report generated on",
+                categories: ["General Costs", "Architecture", "Structures", "HVAC", "Electrical Inst.", "Landscaping", "Telecom", "Electromechanical", "Gas", "Water Supply", "Drainage", "Photovoltaic", "Pools"],
+                ktl_cumulative: "KTL Cumulative",
+                map_cumulative: "MAP Cumulative",
+                month: "Month"
+            }
+        };
+        
+        const summaryData = {
+            "categories": ["Encargos Gerais", "Arquitectura", "Estruturas", "AVAC", "Inst. Elétricas", "Paisagismo", "Telecomunicações", "Inst. Eletromecânicas", "Gás", "Abast. Água", "Drenagem", "Fotovoltaico", "Piscinas"],
+            "ktl": [925613.61, 3233483.26, 1160800.45, 619642.13, 593962.71, 552003.58, 20937.59, 78660.00, 31393.44, 49842.18, 113337.89, 13440.02, 126939.94],
+            "map": [832946.00, 3128386.81, 903791.67, 487719.77, 699552.52, 236878.53, 41861.95, 57970.00, 4879.46, 38034.25, 27872.48, 24793.56, 129088.08]
+        };
+        
+        const grandTotalKTL = 7616117.80;
+        const grandTotalMAP = 7098375.08;
+        const prazoKTL = 24;
+        const prazoMAP = 20;
+
+        const categoryMapping = {
+            "Encargos Gerais": "EG", "Arquitectura": "AR", "Estruturas": "ST",
+            "AVAC": "ME", "Inst. Elétricas": "EL", "Paisagismo": "LA",
+            "Telecomunicações": "TL", "Inst. Eletromecânicas": "LF", "Gás": "FG",
+            "Abast. Água": "PL", "Drenagem": "DR", "Fotovoltaico": "RE", "Piscinas": "PO"
+        };
+        
+        const detailedData = {
+          EG: [
+            {id: '1.8', desc: 'Serviços de BIM Management e Coordenação.', en_desc: 'BIM Management and Coordination Services.', un: 'vg', qty: 1, ktl: 203280, map: 150000},
+            {id: '1.3', desc: 'Diretor de Obra e equipa técnica.', en_desc: 'Site Manager and technical team.', un: 'vg', qty: 1, ktl: 184500, map: 108618.40},
+            {id: '1.2', desc: 'Estaleiro, incluindo vedações, redes provisórias, etc.', en_desc: 'Construction site setup, including fencing, temporary networks, etc.', un: 'vg', qty: 1, ktl: 110700, map: 65171.04},
+            {id: '1.5', desc: 'Seguro de acidentes de trabalho e responsabilidade civil.', en_desc: 'Workplace accident and civil liability insurance.', un: 'vg', qty: 1, ktl: 92250, map: 21723.68},
+            {id: '1.4', desc: 'Segurança, higiene e saúde no trabalho, incluindo PSS.', en_desc: 'Health and safety at work, including H&S Plan.', un: 'vg', qty: 1, ktl: 73800, map: 43447.36},
+            {id: '1.6', desc: 'Gestão de resíduos, incluindo plano de gestão e taxas.', en_desc: 'Waste management, including management plan and fees.', un: 'vg', qty: 1, ktl: 18450, map: 6517.10},
+            {id: '1.1', desc: 'Projeto, incluindo telas finais, compilação técnica e manuais.', en_desc: 'Project design, including as-built drawings, technical compilation, and manuals.', un: 'vg', qty: 1, ktl: 14760, map: 9776.49},
+          ],
+          AR: [
+            {id: '3.11.1', desc: 'Caixilharia de alumínio com corte térmico e vidro duplo.', en_desc: 'Aluminum frames with thermal break and double glazing.', un: 'm2', qty: 280, ktl: 850.2, map: 777.94},
+            {id: '3.12.1', desc: 'Mobiliário de cozinha, incluindo bancadas e eletrodomésticos.', en_desc: 'Kitchen furniture, including countertops and appliances.', un: 'vg', qty: 1, ktl: 185000, map: 165000},
+            {id: '3.8.1', desc: 'Pavimento em soalho de madeira de carvalho.', en_desc: 'Oak wood flooring.', un: 'm2', qty: 850, ktl: 155, map: 142},
+            {id: '3.6.1', desc: 'Revestimento de fachadas com sistema ETICS (Capoto).', en_desc: 'Facade cladding with ETICS system.', un: 'm2', qty: 1350, ktl: 89.28, map: 81.12},
+            {id: '3.1.1', desc: 'Alvenarias de tijolo cerâmico furado (15 e 11 cm).', en_desc: 'Hollow ceramic brick masonry (15 and 11 cm).', un: 'm2', qty: 1445, ktl: 51.98, map: 49.15},
+            {id: '3.10.1', desc: 'Carpintarias diversas (portas, aros, armários).', en_desc: 'Various carpentry (doors, frames, closets).', un: 'vg', qty: 1, ktl: 250000, map: 230000},
+            {id: '3.13.1', desc: 'Equipamentos sanitários e acessórios.', en_desc: 'Sanitary equipment and accessories.', un: 'vg', qty: 1, ktl: 95000, map: 88000},
+            {id: '3.5.1', desc: 'Impermeabilizações de coberturas e varandas.', en_desc: 'Waterproofing of roofs and balconies.', un: 'm2', qty: 1200, ktl: 65, map: 58},
+            {id: '3.4.1', desc: 'Isolamentos térmicos e acústicos.', en_desc: 'Thermal and acoustic insulation.', un: 'm2', qty: 2500, ktl: 35, map: 31},
+            {id: '3.2.1', desc: 'Rebocos interiores e exteriores.', en_desc: 'Interior and exterior plastering.', un: 'm2', qty: 3500, ktl: 28, map: 25.5},
+          ],
+          ST: [
+            {id: '4.1.2', desc: 'Betão C30/37 em estrutura (pilares, vigas, lajes).', en_desc: 'C30/37 concrete in structure (columns, beams, slabs).', un: 'm3', qty: 1100, ktl: 210, map: 195.02},
+            {id: '4.2.1', desc: 'Aço em varão A500 NR SD.', en_desc: 'A500 NR SD rebar steel.', un: 'kg', qty: 135000, ktl: 2.1, map: 1.84},
+            {id: '4.1.1', desc: 'Betão C30/37 em fundações.', en_desc: 'C30/37 concrete in foundations.', un: 'm3', qty: 550, ktl: 180, map: 164.86},
+            {id: '4.3.1', desc: 'Cofragem para elementos estruturais.', en_desc: 'Formwork for structural elements.', un: 'm2', qty: 4500, ktl: 38, map: 35.5},
+            {id: '4.4.1.1', desc: 'Vigas de madeira para pérgolas e coberturas.', en_desc: 'Wooden beams for pergolas and roofs.', un: 'm3', qty: 10.04, ktl: 3240, map: 2135.3},
+            {id: '4.3.2', desc: 'Laje colaborante tipo "chapa Coperfil".', en_desc: 'Composite slab, "Coperfil sheet" type.', un: 'm2', qty: 400, ktl: 95, map: 88},
+            {id: '4.4.1.2', desc: 'Pilares de madeira.', en_desc: 'Wooden columns.', un: 'm3', qty: 1.1, ktl: 3240, map: 2135.3},
+            {id: '4.5.1', desc: 'Fundações e coroamento de muros exteriores.', en_desc: 'Foundations and capping for exterior walls.', un: 'ml', qty: 51.3, ktl: 50.3, map: 133.46},
+            {id: '4.3.3', desc: 'Estrutura metálica em perfis de aço.', en_desc: 'Steel structure with steel profiles.', un: 'kg', qty: 12000, ktl: 4.5, map: 4.1},
+            {id: '4.1.3', desc: 'Muros de betão armado.', en_desc: 'Reinforced concrete walls.', un: 'm3', qty: 150, ktl: 250, map: 235},
+          ],
+           ME: [
+            {id: '6.1.1', desc: 'Unidades exteriores de AVAC (Bomba de calor).', en_desc: 'HVAC outdoor units (Heat pump).', un: 'un', qty: 3, ktl: 24500, map: 21750},
+            {id: '6.2.1', desc: 'Unidades interiores de ventilo-convetores.', en_desc: 'Indoor fan coil units.', un: 'un', qty: 25, ktl: 1200, map: 1100},
+            {id: '6.3.1', desc: 'Rede de condutas de ventilação em chapa de aço.', en_desc: 'Steel sheet ventilation duct network.', un: 'm2', qty: 800, ktl: 75, map: 68},
+            {id: '6.4.1', desc: 'Grelhas de insuflação e extração.', en_desc: 'Supply and exhaust grilles.', un: 'un', qty: 50, ktl: 80, map: 72},
+            {id: '6.5.1', desc: 'Ventiladores para extração mecânica.', en_desc: 'Mechanical extraction fans.', un: 'un', qty: 8, ktl: 650, map: 590},
+            {id: '6.6.1', desc: 'Tubagem de cobre para climatização.', en_desc: 'Copper piping for air conditioning.', un: 'ml', qty: 1500, ktl: 22, map: 19.5},
+            {id: '6.77', desc: 'Apoio de Construção Civil para AVAC.', en_desc: 'Civil construction support for HVAC.', un: 'vg', qty: 1, ktl: 11493, map: 9800},
+            {id: '6.75', desc: 'Manutenção preventiva durante o período de garantia.', en_desc: 'Preventive maintenance during the warranty period.', un: 'un', qty: 1, ktl: 0, map: 3223.94},
+            {id: '6.8.1', desc: 'Isolamento de tubagens e condutas.', en_desc: 'Insulation of pipes and ducts.', un: 'm2', qty: 1000, ktl: 18, map: 16.5},
+            {id: '6.9.1', desc: 'Sistema de controlo e gestão técnica centralizada.', en_desc: 'Centralized technical control and management system.', un: 'vg', qty: 1, ktl: 15000, map: 13500},
+          ],
+          EL: [
+            {id: '7.6.1', desc: 'Luminárias interiores e exteriores.', en_desc: 'Indoor and outdoor light fixtures.', un: 'vg', qty: 1, ktl: 120000, map: 152000},
+            {id: '7.4.1', desc: 'Cabos de energia e dados (cobre).', en_desc: 'Power and data cables (copper).', un: 'vg', qty: 1, ktl: 95000, map: 116500},
+            {id: '7.1.1', desc: 'Quadros elétricos gerais e de distribuição.', en_desc: 'Main and distribution electrical panels.', un: 'un', qty: 12, ktl: 4500, map: 4800},
+            {id: '7.2.1', desc: 'Tomadas, interruptores e outros mecanismos.', en_desc: 'Outlets, switches, and other mechanisms.', un: 'un', qty: 800, ktl: 45, map: 48},
+            {id: '7.3.1', desc: 'Tubagem para instalação elétrica (VD, ERM).', en_desc: 'Conduit for electrical installation (VD, ERM).', un: 'ml', qty: 5000, ktl: 8.5, map: 9},
+            {id: '7.5.1', desc: 'Posto de transformação.', en_desc: 'Transformer station.', un: 'un', qty: 1, ktl: 35000, map: 38000},
+            {id: '7.7.1.9', desc: 'Amplificadores de som.', en_desc: 'Sound amplifiers.', un: 'un', qty: 15, ktl: 1364.18, map: 1388.19},
+            {id: '7.7.1.5', desc: 'Altifalantes de som ambiente (100 ICW8).', en_desc: 'Ambient sound speakers (100 ICW8).', un: 'un', qty: 43, ktl: 535.06, map: 544.47},
+            {id: '7.8.1', desc: 'Rede de terras e proteção contra descargas.', en_desc: 'Grounding network and surge protection.', un: 'vg', qty: 1, ktl: 18000, map: 19500},
+            {id: '7.9.1', desc: 'Gerador de emergência.', en_desc: 'Emergency generator.', un: 'un', qty: 1, ktl: 25000, map: 27000},
+          ],
+          LA: [
+            {id: '13.1.1', desc: 'Movimentação de terras e modelação do terreno.', en_desc: 'Earthworks and terrain shaping.', un: 'm3', qty: 1200, ktl: 25.5, map: 18.8},
+            {id: '13.2.1', desc: 'Sistema de rega automática.', en_desc: 'Automatic irrigation system.', un: 'vg', qty: 1, ktl: 65000, map: 58000},
+            {id: '13.3.1', desc: 'Plantação de árvores de grande porte.', en_desc: 'Planting of large trees.', un: 'un', qty: 50, ktl: 800, map: 750},
+            {id: '13.3.2', desc: 'Plantação de arbustos e herbáceas.', en_desc: 'Planting of shrubs and herbaceous plants.', un: 'm2', qty: 2500, ktl: 45, map: 40},
+            {id: '13.4.1', desc: 'Instalação de relvado em tapete.', en_desc: 'Sod lawn installation.', un: 'm2', qty: 1500, ktl: 25, map: 22},
+            {id: '13.5.1', desc: 'Caminhos e pavimentos exteriores.', en_desc: 'Exterior paths and pavements.', un: 'm2', qty: 600, ktl: 90, map: 82},
+            {id: '13.6.1', desc: 'Iluminação exterior (projetores, balizadores).', en_desc: 'Exterior lighting (spotlights, bollards).', un: 'vg', qty: 1, ktl: 48000, map: 42000},
+            {id: '13.8', desc: 'Manutenção dos espaços exteriores (12 meses).', en_desc: 'Maintenance of outdoor spaces (12 months).', un: 'meses', qty: 12, ktl: 1800, map: 731.2},
+            {id: '13.7.1', desc: 'Mobiliário urbano (bancos, papeleiras).', en_desc: 'Urban furniture (benches, bins).', un: 'vg', qty: 1, ktl: 15000, map: 12000},
+            {id: '13.1.2', desc: 'Drenagem de águas pluviais nos jardins.', en_desc: 'Stormwater drainage in gardens.', un: 'ml', qty: 300, ktl: 55, map: 48},
+          ],
+          LF: [ {id: '14.1', desc: 'Ascensor elétrico para 8 pessoas.', en_desc: 'Electric elevator for 8 people.', un: 'un', qty: 1, ktl: 78660, map: 57970} ],
+          FG: [
+            {id: '9.1', desc: 'Depósito de gás enterrado.', en_desc: 'Underground gas tank.', un: 'un', qty: 1, ktl: 4500, map: 0},
+            {id: '9.5.1', desc: 'Tubagem de Cobre para rede interior (22mm).', en_desc: 'Copper piping for indoor network (22mm).', un: 'ml', qty: 150, ktl: 28, map: 25},
+            {id: '9.4.1', desc: 'Tubagem em PEAD para rede exterior (40mm).', en_desc: 'HDPE piping for outdoor network (40mm).', un: 'ml', qty: 73.76, ktl: 19.68, map: 12.2},
+            {id: '9.3', desc: 'Escavação e aterro para tubagem.', en_desc: 'Excavation and backfill for piping.', un: 'm3', qty: 29.04, ktl: 55, map: 23.27},
+            {id: '9.2', desc: 'Posto de garrafas de gás.', en_desc: 'Gas bottle station.', un: 'un', qty: 1, ktl: 326.64, map: 610.22},
+          ],
+          DR: [
+            {id: '11.2', desc: 'Estação elevatória.', en_desc: 'Pumping station.', un: 'Un', qty: 1, ktl: 12990.78, map: 3948.56},
+            {id: '11.19.1', desc: 'Caixa de visita pré-fabricada (2,00m).', en_desc: 'Precast inspection chamber (2.00m).', un: 'Un', qty: 4, ktl: 4200, map: 1065.11},
+            {id: '11.21', desc: 'Execução de Trincheira Drenante.', en_desc: 'Execution of a Drainage Trench.', un: 'm3', qty: 2, ktl: 3000, map: 113},
+            {id: '11.4.1', desc: 'Tubagem PVC corrugado SN8 DN 250.', en_desc: 'Corrugated PVC pipe SN8 DN 250.', un: 'ml', qty: 200, ktl: 35.5, map: 28.75},
+            {id: '11.1', desc: 'Abertura e tapamento de valas.', en_desc: 'Trench excavation and backfilling.', un: 'm3', qty: 500, ktl: 22, map: 18.5},
+            {id: '11.6', desc: 'Sumidouros e caleiras.', en_desc: 'Drains and gutters.', un: 'un', qty: 30, ktl: 150, map: 135},
+            {id: '11.8', desc: 'Caixas de ramal de ligação.', en_desc: 'Connection junction boxes.', un: 'un', qty: 15, ktl: 250, map: 220},
+            {id: '11.12.1', desc: 'Separador de gorduras.', en_desc: 'Grease separator.', un: 'un', qty: 2, ktl: 1800, map: 1650},
+            {id: '11.13.1', desc: 'Separador de hidrocarbonetos.', en_desc: 'Hydrocarbon separator.', un: 'un', qty: 1, ktl: 2500, map: 2300},
+            {id: '11.10.1', desc: 'Bombas submersíveis para poços.', en_desc: 'Submersible pumps for wells.', un: 'un', qty: 3, ktl: 950, map: 880},
+          ],
+          TL: [
+            {id: '8.3.4.2.1.1', desc: 'Tomada HDMI pré-conectorizada.', en_desc: 'Pre-connectorized HDMI socket.', un: 'm', qty: 36, ktl: 130.5, map: 94.14},
+            {id: '8.3.2.1.2', desc: 'Tomada RJ45 Cat.6.', en_desc: 'RJ45 Cat.6 socket.', un: 'un', qty: 120, ktl: 35, map: 28.5},
+            {id: '8.3.1.2.1', desc: 'Bastidor 42U.', en_desc: '42U Rack.', un: 'un', qty: 1, ktl: 1500, map: 1350},
+            {id: '8.3.2.2.1', desc: 'Cabo U/UTP Cat.6.', en_desc: 'U/UTP Cat.6 Cable.', un: 'ml', qty: 2500, ktl: 1.8, map: 1.5},
+            {id: '8.3.4.1.1.11', desc: 'Painel UTP 19" 1U 24P RJ45 CAT6.', en_desc: 'UTP Panel 19" 1U 24P RJ45 CAT6.', un: 'un', qty: 1, ktl: 270, map: 86.58},
+            {id: '8.3.4.1.1.9', desc: 'Painel Fibra Ótica 19" 1U 24 SC Duplex.', en_desc: 'Fiber Optic Panel 19" 1U 24 SC Duplex.', un: 'un', qty: 1, ktl: 150, map: 164.82},
+            {id: '8.2.1.1.1', desc: 'Caixa de seccionamento geral (ATER).', en_desc: 'Main sectioning box (ATER).', un: 'un', qty: 1, ktl: 850, map: 780},
+            {id: '8.3.3.1.1', desc: 'Tomada coaxial TV-R/SAT.', en_desc: 'Coaxial TV-R/SAT socket.', un: 'un', qty: 40, ktl: 30, map: 26},
+            {id: '8.3.3.2.1', desc: 'Cabo coaxial.', en_desc: 'Coaxial cable.', un: 'ml', qty: 800, ktl: 1.5, map: 1.2},
+            {id: '8.4.1', desc: 'Contactos com concessionárias e taxas.', en_desc: 'Contacts with utility companies and fees.', un: 'vg', qty: 1, ktl: 500, map: 284.17},
+          ],
+          PL: [
+            {id: '10.13', desc: 'Grupo de bombagem (Grundfos HYDRO MPC-E).', en_desc: 'Pumping unit (Grundfos HYDRO MPC-E).', un: 'Un', qty: 1, ktl: 11394, map: 15076.33},
+            {id: '10.14', desc: 'Sistema de tratamento de água.', en_desc: 'Water treatment system.', un: 'Un', qty: 1, ktl: 11508.18, map: 5743.36},
+            {id: '10.12.1', desc: 'Depósito de abastecimento 5000 Lt.', en_desc: '5000 Lt supply tank.', un: 'Un', qty: 1, ktl: 2874.12, map: 1974.28},
+            {id: '10.5.1', desc: 'Tubagem PPR PN16 (DN25 a DN50).', en_desc: 'PPR PN16 piping (DN25 to DN50).', un: 'ml', qty: 800, ktl: 18, map: 15.5},
+            {id: '10.6.1', desc: 'Tubagem multicamada (DN16 a DN32).', en_desc: 'Multilayer piping (DN16 to DN32).', un: 'ml', qty: 1200, ktl: 9, map: 7.8},
+            {id: '10.1', desc: 'Ramal de ligação à rede pública.', en_desc: 'Connection to the public network.', un: 'vg', qty: 1, ktl: 3500, map: 3100},
+            {id: '10.2.1', desc: 'Contador de água.', en_desc: 'Water meter.', un: 'un', qty: 1, ktl: 450, map: 400},
+            {id: '10.8', desc: 'Válvulas de corte e seccionamento.', en_desc: 'Shut-off and sectioning valves.', un: 'un', qty: 50, ktl: 40, map: 36},
+            {id: '10.9.1', desc: 'Rede de água quente e retorno.', en_desc: 'Hot water and return network.', un: 'ml', qty: 600, ktl: 25, map: 22},
+            {id: '10.11', desc: 'Isolamento de tubagens.', en_desc: 'Piping insulation.', un: 'ml', qty: 1400, ktl: 12, map: 10.5},
+          ],
+          RE: [
+            {id: '15.3.2', desc: 'Bateria TESLA Powerwall 2.', en_desc: 'TESLA Powerwall 2 Battery.', un: 'un', qty: 3, ktl: 2160, map: 0},
+            {id: '15.1.1', desc: 'Painéis fotovoltaicos (Haier 550W).', en_desc: 'Photovoltaic panels (Haier 550W).', un: 'un', qty: 8, ktl: 180, map: 3075.82},
+            {id: '15.3.1', desc: 'Microinversor 1,1 kW.', en_desc: 'Microinverter 1.1 kW.', un: 'un', qty: 4, ktl: 840, map: 0},
+            {id: '15.21', desc: 'Estrutura para fixação de paineis.', en_desc: 'Mounting structure for panels.', un: 'm2', qty: 25, ktl: 42, map: 0},
+            {id: '15.4.1', desc: 'Monitorização TESLA + GW.', en_desc: 'TESLA + GW Monitoring.', un: 'un', qty: 3, ktl: 240, map: 0},
+            {id: '15.5.1', desc: 'Cabo solar 6mm2.', en_desc: '6mm2 solar cable.', un: 'un', qty: 55, ktl: 2.14, map: 3.4},
+            {id: '15.5.2', desc: 'Fichas PV MC40.', en_desc: 'PV MC40 connectors.', un: 'un', qty: 16, ktl: 9.6, map: 0}
+          ],
+          PO: [
+            {id: '16.1.1', desc: 'Betão para estrutura da piscina.', en_desc: 'Concrete for pool structure.', un: 'm3', qty: 150, ktl: 220, map: 205},
+            {id: '16.2.1', desc: 'Impermeabilização da piscina.', en_desc: 'Pool waterproofing.', un: 'm2', qty: 350, ktl: 70, map: 65},
+            {id: '16.3.1', desc: 'Revestimento em pastilha de vidro.', en_desc: 'Glass mosaic tile finish.', un: 'm2', qty: 350, ktl: 85, map: 78},
+            {id: '16.4.1', desc: 'Sistema de filtração (filtro, bomba).', en_desc: 'Filtration system (filter, pump).', un: 'un', qty: 2, ktl: 8000, map: 7500},
+            {id: '16.4.5', desc: 'Sistema de tratamento de água (Cloro/Sal).', en_desc: 'Water treatment system (Chlorine/Salt).', un: 'un', qty: 2, ktl: 4500, map: 4200},
+            {id: '16.4.7', desc: 'Bomba de calor para aquecimento da água.', en_desc: 'Heat pump for water heating.', un: 'un', qty: 2, ktl: 12000, map: 11000},
+            {id: '16.4.10', desc: 'Cobertura automática para piscina.', en_desc: 'Automatic pool cover.', un: 'un', qty: 2, ktl: 15000, map: 13800},
+            {id: '16.4.12', desc: 'Projetores subaquáticos LED.', en_desc: 'LED underwater lights.', un: 'un', qty: 12, ktl: 350, map: 320},
+            {id: '16.4.14', desc: 'Testes e arranques das instalações.', en_desc: 'System testing and commissioning.', un: 'vg', qty: 1, ktl: 1198.44, map: 0},
+            {id: '16.4.15', desc: 'Telas finais.', en_desc: 'As-built drawings.', un: 'vg', qty: 1, ktl: 599.22, map: 0},
+          ]
+        };
+
+        let summaryChart;
+        let financialTimelineChart;
+        let currentLang = 'pt';
+
+        const formatCurrency = (value) => new Intl.NumberFormat('pt-PT', { style: 'currency', currency: 'EUR' }).format(value);
+        
+        const setLanguage = (lang) => {
+            currentLang = lang;
+            document.documentElement.lang = lang;
+            document.querySelectorAll('[data-lang-key]').forEach(elem => {
+                const key = elem.getAttribute('data-lang-key');
+                if (translations[lang] && translations[lang][key]) {
+                    // For specific keys with nested elements, we handle them inside renderSummary
+                    if (key !== 'conclusion_p1') {
+                        elem.innerHTML = translations[lang][key];
+                    }
+                }
+            });
+
+            renderSummary();
+            renderSummaryChart();
+            renderFinancialTimelineChart();
+            populateCategorySelector();
+            updateDetailedAnalysis(document.getElementById('category-selector').value);
+            renderExclusions();
+            
+            document.getElementById('lang-pt').classList.toggle('active', lang === 'pt');
+            document.getElementById('lang-en').classList.toggle('active', lang === 'en');
+        };
+
+        const renderSummary = () => {
+            const totalDiff = grandTotalKTL - grandTotalMAP;
+            const totalDiffPercent = grandTotalMAP !== 0 ? (totalDiff / grandTotalMAP) * 100 : 0;
+            document.getElementById('total-ktl').textContent = formatCurrency(grandTotalKTL);
+            document.getElementById('total-map').textContent = formatCurrency(grandTotalMAP);
+            document.getElementById('total-diff').textContent = formatCurrency(totalDiff);
+            document.getElementById('total-diff-percent').textContent = `${totalDiffPercent.toFixed(2)}%`;
+            document.getElementById('prazo-ktl').textContent = `${prazoKTL} ${translations[currentLang].months_suffix}`;
+            document.getElementById('prazo-map').textContent = `${prazoMAP} ${translations[currentLang].months_suffix}`;
+            
+            const p1Element = document.querySelector('[data-lang-key="conclusion_p1"]');
+            if(p1Element) {
+                p1Element.innerHTML = translations[currentLang].conclusion_p1;
+                document.getElementById('conclusion-map-total-val').textContent = formatCurrency(grandTotalMAP);
+                document.getElementById('conclusion-ktl-total-val').textContent = formatCurrency(grandTotalKTL);
+                document.getElementById('conclusion-diff-total-val').textContent = formatCurrency(Math.abs(totalDiff));
+                document.getElementById('conclusion-cheaper-proposer-val').textContent = totalDiff > 0 ? 'MAP' : 'KTL';
+            }
+        };
+
+        const renderSummaryChart = () => {
+            const ctx = document.getElementById('summaryChart').getContext('2d');
+            if (summaryChart) summaryChart.destroy();
+            summaryChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: translations[currentLang].categories,
+                    datasets: [{
+                        label: 'KTL',
+                        data: summaryData.ktl,
+                        backgroundColor: 'rgba(59, 130, 246, 0.7)'
+                    }, {
+                        label: 'MAP (R02)',
+                        data: summaryData.map,
+                        backgroundColor: 'rgba(16, 185, 129, 0.7)'
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { callback: value => formatCurrency(value) } }, x: { ticks: { autoSkip: false, maxRotation: 45, minRotation: 45 } } },
+                    plugins: { tooltip: { callbacks: { label: context => `${context.dataset.label}: ${formatCurrency(context.raw)}` } } },
+                    onClick: (event, elements) => {
+                        if (elements.length > 0) {
+                            const categoryName = summaryData.categories[elements[0].index];
+                            const categoryCode = categoryMapping[categoryName];
+                            if (categoryCode) {
+                                document.getElementById('category-selector').value = categoryCode;
+                                updateDetailedAnalysis(categoryCode);
+                                document.getElementById('details').scrollIntoView({ behavior: 'smooth' });
+                            }
+                        }
+                    }
+                }
+            });
+        };
+
+        const generateFinancialTimelineData = (duration, categoryValues, totalValue) => {
+            const monthlyCosts = Array(duration).fill(0);
+            const getCost = (catName) => categoryValues[summaryData.categories.indexOf(catName)] || 0;
+            const categorySum = categoryValues.reduce((a, b) => a + b, 0);
+
+            if (categorySum === 0) {
+                const evenDistribution = totalValue / duration;
+                for(let i = 0; i < duration; i++) { monthlyCosts[i] = evenDistribution; }
+            } else {
+                const scalingFactor = totalValue / categorySum;
+                const costGroups = {
+                    general: getCost("Encargos Gerais") * scalingFactor,
+                    structure: getCost("Estruturas") * scalingFactor,
+                    installations: (getCost("AVAC") + getCost("Inst. Elétricas") + getCost("Telecomunicações") + getCost("Inst. Eletromecânicas") + getCost("Gás") + getCost("Abast. Água") + getCost("Drenagem") + getCost("Fotovoltaico")) * scalingFactor,
+                    finishes: (getCost("Arquitectura") + getCost("Paisagismo") + getCost("Piscinas")) * scalingFactor
+                };
+                const phases = {
+                    structure_end: Math.ceil(duration * 0.35),
+                    installations_start: Math.ceil(duration * 0.2),
+                    installations_end: Math.ceil(duration * 0.85),
+                    finishes_start: Math.ceil(duration * 0.4)
+                };
+                const distributeCost = (total, start, end) => {
+                    const months = end - start;
+                    if (months <= 0 || total === 0) return;
+                    const perMonth = total / months;
+                    for (let i = start; i < end; i++) {
+                        if (monthlyCosts[i] !== undefined) monthlyCosts[i] += perMonth;
+                    }
+                };
+                distributeCost(costGroups.general, 0, duration);
+                distributeCost(costGroups.structure, 0, phases.structure_end);
+                distributeCost(costGroups.installations, phases.installations_start, phases.installations_end);
+                distributeCost(costGroups.finishes, phases.finishes_start, duration);
+            }
+            
+            const cumulative = [];
+            monthlyCosts.reduce((acc, val, index) => {
+                let newTotal = acc + val;
+                if (index === duration - 1) { newTotal = totalValue; }
+                cumulative.push(newTotal);
+                return newTotal;
+            }, 0);
+            return cumulative;
+        };
+
+        const renderFinancialTimelineChart = () => {
+            const ctx = document.getElementById('financialTimelineChart').getContext('2d');
+            const timelineLabels = Array.from({ length: prazoKTL }, (_, i) => `${translations[currentLang].month} ${i + 1}`);
+            const ktlTimeline = generateFinancialTimelineData(prazoKTL, summaryData.ktl, grandTotalKTL);
+            const mapTimeline = generateFinancialTimelineData(prazoMAP, summaryData.map, grandTotalMAP);
+
+            if (financialTimelineChart) financialTimelineChart.destroy();
+            financialTimelineChart = new Chart(ctx, {
+                type: 'line',
+                data: {
+                    labels: timelineLabels,
+                    datasets: [{
+                        label: translations[currentLang].ktl_cumulative,
+                        data: ktlTimeline,
+                        borderColor: 'rgba(59, 130, 246, 1)',
+                        backgroundColor: 'rgba(59, 130, 246, 0.1)',
+                        fill: true, tension: 0.2
+                    }, {
+                        label: translations[currentLang].map_cumulative,
+                        data: mapTimeline,
+                        borderColor: 'rgba(16, 185, 129, 1)',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true, tension: 0.2
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: { y: { beginAtZero: true, ticks: { callback: value => formatCurrency(value) } } },
+                    plugins: { tooltip: { callbacks: { label: context => `${context.dataset.label}: ${formatCurrency(context.raw)}` } } }
+                }
+            });
+        };
+
+        const populateCategorySelector = () => {
+            const selector = document.getElementById('category-selector');
+            const currentValue = selector.value;
+            selector.querySelectorAll('option:not([value="all"])').forEach(opt => opt.remove());
+            summaryData.categories.forEach((catName, index) => {
+                const catCode = categoryMapping[catName];
+                if(catCode){
+                    const option = document.createElement('option');
+                    option.value = catCode;
+                    option.textContent = translations[currentLang].categories[index];
+                    selector.appendChild(option);
+                }
+            });
+            selector.value = currentValue;
+        };
+        
+        const renderTable = (tbodyId, items) => {
+            const tableBody = document.getElementById(tbodyId);
+            let content = '';
+            if (items.length === 0) {
+                content = `<tr><td colspan="5" class="text-center p-8 text-gray-500">${translations[currentLang].no_items_found}</td></tr>`;
+            } else {
+                items.forEach(item => {
+                    const totalKtl = item.ktl * (item.qty || 1);
+                    const totalMap = item.map * (item.qty || 1);
+                    const diff = totalKtl - totalMap;
+                    let rowClass = 'diff-zero';
+                    if (diff > 1) rowClass = 'diff-pos';
+                    else if (diff < -1) rowClass = 'diff-neg';
+                    if (totalKtl === 0 || totalMap === 0) rowClass = 'note-item';
+                    const description = currentLang === 'en' && item.en_desc ? item.en_desc : item.desc;
+                    content += `<tr class="${rowClass}">
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-medium text-gray-900">${item.id}</td>
+                        <td class="px-4 py-2 whitespace-normal text-sm text-gray-600">${description}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${formatCurrency(totalKtl)}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm text-gray-700">${formatCurrency(totalMap)}</td>
+                        <td class="px-4 py-2 whitespace-nowrap text-sm font-semibold ${diff > 0 ? 'text-red-600' : 'text-green-600'}">${formatCurrency(diff)}</td>
+                    </tr>`;
+                });
+            }
+            tableBody.innerHTML = content;
+        }
+
+        const updateDetailedAnalysis = (category) => {
+            let categoryItems = [];
+            if (category === 'all') {
+                categoryItems = Object.values(detailedData).flat();
+            } else {
+                categoryItems = detailedData[category] || [];
+            }
+            const sortedByWeight = [...categoryItems].sort((a, b) => {
+                const weightA = (a.ktl * (a.qty || 1) + a.map * (a.qty || 1)) / 2;
+                const weightB = (b.ktl * (b.qty || 1) + b.map * (b.qty || 1)) / 2;
+                return weightB - weightA;
+            });
+            const sortedByDiff = [...categoryItems].sort((a, b) => {
+                const diffA = Math.abs((a.ktl * (a.qty || 1)) - (a.map * (a.qty || 1)));
+                const diffB = Math.abs((b.ktl * (b.qty || 1)) - (b.map * (b.qty || 1)));
+                return diffB - diffA;
+            });
+            renderTable('details-table-body-weight', sortedByWeight.slice(0, 10));
+            renderTable('details-table-body-diff', sortedByDiff.slice(0, 10));
+        };
+
+        const renderExclusions = () => {
+            const ktlExclusionsDiv = document.getElementById('ktl-exclusions');
+            const mapExclusionsDiv = document.getElementById('map-exclusions');
+            let ktlContent = '', mapContent = '';
+            let ktlCount = 0, mapCount = 0;
+            const createNoteItem = (itemData, company, price, oppositePrice) => {
+                const description = currentLang === 'en' && itemData.en_desc ? itemData.en_desc : itemData.desc;
+                const priceLabel = currentLang === 'en' ? 'Price' : 'Preço';
+                const oppositePriceLabel = currentLang === 'en' ? 'Opposite Price' : 'Preço Oposto';
+                return `
+                <div class="note-item border-l-4 p-3 rounded ${company === 'KTL' ? 'border-blue-400' : 'border-green-400'}">
+                   <p class="font-semibold text-sm text-gray-800">${itemData.id} - ${description}</p>
+                   <p class="text-xs text-gray-600">${priceLabel} ${company}: ${formatCurrency(price)} | ${oppositePriceLabel}: ${formatCurrency(oppositePrice)}</p>
+                </div>`;
+            }
+
+            Object.values(detailedData).flat().forEach(item => {
+                const ktlPrice = item.ktl * (item.qty || 1);
+                const mapPrice = item.map * (item.qty || 1);
+                if (ktlPrice === 0 && mapPrice > 0) {
+                    ktlContent += createNoteItem(item, 'KTL', ktlPrice, mapPrice);
+                    ktlCount++;
+                }
+                if (mapPrice === 0 && ktlPrice > 0) {
+                    mapContent += createNoteItem(item, 'MAP', mapPrice, ktlPrice);
+                    mapCount++;
+                }
+            });
+            ktlExclusionsDiv.innerHTML = ktlCount > 0 ? ktlContent : `<p class="text-gray-500">${translations[currentLang].no_items_found}</p>`;
+            mapExclusionsDiv.innerHTML = mapCount > 0 ? mapContent : `<p class="text-gray-500">${translations[currentLang].no_items_found_2}</p>`;
+        };
+        
+        document.getElementById('lang-pt').addEventListener('click', () => setLanguage('pt'));
+        document.getElementById('lang-en').addEventListener('click', () => setLanguage('en'));
+        document.getElementById('category-selector').addEventListener('change', (e) => updateDetailedAnalysis(e.target.value));
+        document.getElementById('report-date').textContent = new Date().toLocaleDateString('pt-PT', { year: 'numeric', month: 'long', day: 'numeric' });
+        
+        setLanguage('pt');
+    });
+    </script>
+</body>
+</html>
+
